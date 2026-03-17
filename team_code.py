@@ -154,11 +154,7 @@ def run_model(model, record, data_folder, verbose):
     mddf['Sex_cat'] = mddf.Sex.map({'Male':1, 'Female':0})
     
     # zdiskretnenie veku
-    mddf['Age_cat'] = -1
-    mddf.loc[mddf.query("Age >= 50 and Age < 60").index,'Age_cat'] = 0
-    mddf.loc[mddf.query("Age >= 60 and Age < 70").index,'Age_cat'] = 1
-    mddf.loc[mddf.query("Age >= 70 and Age < 80").index,'Age_cat'] = 2
-    mddf.loc[mddf.query("Age >= 80").index,'Age_cat'] = 3    
+    mddf = discretize_age(mddf)    
 
     mddf.set_index('BDSPPatientID', inplace=True)
     
