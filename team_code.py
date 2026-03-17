@@ -52,15 +52,11 @@ def train_model(data_folder, model_folder, verbose, csv_path=DEFAULT_CSV_PATH):
     
     features = ['Age_cat','Sex_cat','BMI_cat']
     
-    # mapovanie pohlavia
+    # transforming sex
     mddf['Sex_cat'] = mddf.Sex.map({'Male':1, 'Female':0})
     
-    # zdiskretnenie veku
-    mddf['Age_cat'] = -1
-    mddf.loc[mddf.query("Age >= 50 and Age < 60").index,'Age_cat'] = 0
-    mddf.loc[mddf.query("Age >= 60 and Age < 70").index,'Age_cat'] = 1
-    mddf.loc[mddf.query("Age >= 70 and Age < 80").index,'Age_cat'] = 2
-    mddf.loc[mddf.query("Age >= 80").index,'Age_cat'] = 3    
+    # discertizing  age
+    mddf = discretize_age(mddf)   
 
     mddf.set_index('BDSPPatientID', inplace=True)
     
@@ -101,14 +97,12 @@ def train_model(data_folder, model_folder, verbose, csv_path=DEFAULT_CSV_PATH):
     mddf.loc[mddf_pos_test.index,'BMI'] = pos_pred
     mddf.loc[mddf_neg_test.index,'BMI'] = neg_pred
     
-    mddf['BMI_cat'] = -1 # NULL (should not be present)
-    mddf.loc[mddf.query("BMI < 25").index,'BMI_cat'] = 0 # underweight and healthy weight
-    mddf.loc[mddf.query("BMI >= 25 and BMI < 30").index,'BMI_cat'] = 1 # overweight
-    mddf.loc[mddf.query("BMI >= 30 and BMI < 35").index,'BMI_cat'] = 2 # class 1 obesity
-    mddf.loc[mddf.query("BMI >= 35 and BMI < 40").index,'BMI_cat'] = 3 # class 2 obesity
-    mddf.loc[mddf.query("BMI >= 40").index,'BMI'] = 4 # severe/class 3 obesity
+    # discretizing BMI
+    mddf = discretize_bmi(mddf)
     
     y_train = mddf.pop('Cognitive_Impairment').values
+    
+    # only used features
     X_train = mddf.loc[:,features].values
     
     clf = RandomForestClassifier(random_state=2026, n_estimators=1000, class_weight={False:8, True:1})
@@ -191,13 +185,10 @@ def run_model(model, record, data_folder, verbose):
         neg_pred = rf_reg_n.predict(X2_test)
         mddf.loc[mddf_neg_test.index,'BMI'] = neg_pred
     
-    mddf['BMI_cat'] = -1 # NULL (should not be present)
-    mddf.loc[mddf.query("BMI < 25").index,'BMI_cat'] = 0 # underweight and healthy weight
-    mddf.loc[mddf.query("BMI >= 25 and BMI < 30").index,'BMI_cat'] = 1 # overweight
-    mddf.loc[mddf.query("BMI >= 30 and BMI < 35").index,'BMI_cat'] = 2 # class 1 obesity
-    mddf.loc[mddf.query("BMI >= 35 and BMI < 40").index,'BMI_cat'] = 3 # class 2 obesity
-    mddf.loc[mddf.query("BMI >= 40").index,'BMI_cat'] = 4 # severe/class 3 obesity    
+    # discretize BMI
+    mddf = discretize_bmi(mddf)
 
+    # only used features
     mddf = mddf.loc[:,features]
     
     X_test = mddf.values
@@ -219,3 +210,22 @@ def run_model(model, record, data_folder, verbose):
 def save_model(model_folder, model):
     filename = os.path.join(model_folder, 'model.sav')
     joblib.dump(model, filename, protocol=0)
+ 
+# discertize age
+def discretize_age(mddf):
+    mddf['Age_cat'] = -1
+    mddf.loc[mddf.query("Age >= 50 and Age < 60").index,'Age_cat'] = 0
+    mddf.loc[mddf.query("Age >= 60 and Age < 70").index,'Age_cat'] = 1
+    mddf.loc[mddf.query("Age >= 70 and Age < 80").index,'Age_cat'] = 2
+    mddf.loc[mddf.query("Age >= 80").index,'Age_cat'] = 3
+    return mddf
+
+# disceretize bmi
+def discretize_bmi(mddf):
+    mddf['BMI_cat'] = -1 # NULL (should not be present)
+    mddf.loc[mddf.query("BMI < 25").index,'BMI_cat'] = 0 # underweight and healthy weight
+    mddf.loc[mddf.query("BMI >= 25 and BMI < 30").index,'BMI_cat'] = 1 # overweight
+    mddf.loc[mddf.query("BMI >= 30 and BMI < 35").index,'BMI_cat'] = 2 # class 1 obesity
+    mddf.loc[mddf.query("BMI >= 35 and BMI < 40").index,'BMI_cat'] = 3 # class 2 obesity
+    mddf.loc[mddf.query("BMI >= 40").index,'BMI'] = 4 # severe/class 3 obesity
+    return mddf
