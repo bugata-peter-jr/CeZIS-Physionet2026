@@ -18,6 +18,8 @@ RUN conda install -c conda-forge pandas --yes
 RUN conda install -c conda-forge scikit-learn --yes
 ## RUN conda install -c conda-forge wfdb=4.1.2 --yes
 RUN conda install -c conda-forge mne-base --yes
+RUN conda install tqdm
 RUN pip install wfdb==4.1.2
+RUN pip install edfio
 
 
