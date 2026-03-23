@@ -107,11 +107,16 @@ def train_model(data_folder, model_folder, verbose, csv_path=DEFAULT_CSV_PATH):
     
     clf = RandomForestClassifier(random_state=2026, n_estimators=1000, class_weight={False:8, True:1})
     clf.fit(X_train, y_train)
+    
+    # second classifier without BMI
+    X_train_r = mddf.loc[:,['Age_cat','Sex_cat']].values
+    clf_without_bmi = RandomForestClassifier(random_state=2026, n_estimators=1000, class_weight={False:8, True:1})
+    clf_without_bmi.fit(X_train_r, y_train)    
 
     # Create a folder for the model if it does not already exist.
     os.makedirs(model_folder, exist_ok=True)
     
-    model = {'rf_reg_p':rf_reg_p, 'rf_reg_n':rf_reg_n, 'clf':clf}
+    model = {'clf':clf, 'clf_without_bmi': clf_without_bmi}
 
     # Save the model.
     save_model(model_folder, model)
@@ -132,65 +137,47 @@ def load_model(model_folder, verbose):
 def run_model(model, record, data_folder, verbose):
     
     # load the model
-    rf_reg_n = model.get('rf_reg_n')
-    rf_reg_p = model.get('rf_reg_p')
     clf = model.get('clf')
+    clf_without_bmi = model.get('clf_without_bmi')
 
     patient_data_file = os.path.join(data_folder, DEMOGRAPHICS_FILE)
     mddf = pd.read_csv(patient_data_file)
 
     # Extract identifiers from the record dictionary
-    patient_id = record[HEADERS['bids_folder']]
-    site_id    = record[HEADERS['site_id']]
-    session_id = record[HEADERS['session_id']]
+    patient_id_col = HEADERS['bids_folder']
+    session_id_col = HEADERS['session_id']
 
-    mask = (mddf[HEADERS['bids_folder']] == patient_id) & (mddf[HEADERS['session_id']] == session_id)    
+    patient_id = record[patient_id_col]
+    session_id = record[session_id_col]
+
+    mask = (mddf[patient_id_col] == patient_id) & (mddf[session_id_col] == session_id)    
     mddf = mddf.loc[mask]
-    #print(mddf)
-
-    features = ['Age_cat','Sex_cat','BMI_cat']
     
-    # mapovanie pohlavia
+    # imputing sex (default Male)
+    idx = mddf.query("Sex not in ['Male','Female']").index
+    mddf.loc[idx, 'Sex'] = 'Male'
+
+    # transforming sex
     mddf['Sex_cat'] = mddf.Sex.map({'Male':1, 'Female':0})
-    
-    # zdiskretnenie veku
-    mddf = discretize_age(mddf)    
 
-    mddf.set_index('BDSPPatientID', inplace=True)
-    
-    mddf_pos = mddf.query("Cognitive_Impairment == True")
-    
-    mddf_neg = mddf.query("Cognitive_Impairment == False")
-    
-    mddf_pos_test = mddf_pos.query("BMI != BMI")
-    
-    mddf_pos_test = mddf_pos_test.loc[:,['Age_cat','Sex_cat']]
-    
-    X1_test = mddf_pos_test.values
-    
-    if len(X1_test) > 0:
-        pos_pred = rf_reg_p.predict(X1_test)
-        mddf.loc[mddf_pos_test.index,'BMI'] = pos_pred
-    
-    mddf_neg_test = mddf_neg.query("BMI != BMI")    
-    mddf_neg_test = mddf_neg_test.loc[:,['Age_cat','Sex_cat']]
+    # discertizing  age
+    mddf = discretize_age(mddf) 
 
-    X2_test = mddf_neg_test.values    
-    
-    if len(X2_test) > 0:
-        neg_pred = rf_reg_n.predict(X2_test)
-        mddf.loc[mddf_neg_test.index,'BMI'] = neg_pred
-    
-    # discretize BMI
-    mddf = discretize_bmi(mddf)
-
-    # only used features
-    mddf = mddf.loc[:,features]
-    
-    X_test = mddf.values
-
-    binary_output = clf.predict(X_test)[0]
-    probability_output = clf.predict_proba(X_test)[0][1]
+    # according to BMI, we use first or second classifier    
+    bmi = mddf.BMI.iat[0]    
+    if np.isnan(bmi):
+        features = ['Age_cat','Sex_cat']
+        clf_tmp = clf_without_bmi
+    else:
+        # discretizing BMI
+        mddf = discretize_bmi(mddf)
+        features = ['Age_cat','Sex_cat','BMI_cat']
+        clf_tmp = clf
+        
+    X_test = mddf.loc[:,features].values
+        
+    binary_output = clf_tmp.predict(X_test)[0]
+    probability_output = clf_tmp.predict_proba(X_test)[0][1]
 
     return binary_output, probability_output
 
